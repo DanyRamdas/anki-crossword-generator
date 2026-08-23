@@ -28,6 +28,7 @@
   "native_max_answer_words": 0,
   "generation_output": "interactive",
   "show_excluded_preview": false,
+  "show_preview_answers": false,
   "clue_mark_style": "highlight",
   "clue_mark_color": "black",
   "clue_mark_text": "red",

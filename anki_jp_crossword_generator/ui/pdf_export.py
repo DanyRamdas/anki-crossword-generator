@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 from aqt.qt import QFileDialog
@@ -12,14 +13,19 @@ from ..crossword.puzzle import Puzzle
 from ..export.pdf import ExportError, export_answer_pdf, export_puzzle_pdf
 
 
+def default_export_name(*, answer_key: bool, suffix: str) -> str:
+    """Return a date-first default filename for a crossword export."""
+    kind = "-answer-key" if answer_key else ""
+    return f"anki-crossword-{date.today().isoformat()}{kind}.{suffix.lstrip('.')}"
+
+
 def save_pdf(parent, puzzle: Puzzle, title: str, *, answer_key: bool) -> Path | None:
     """Ask for a destination and write either a puzzle or answer-key PDF."""
     kind = "answer key" if answer_key else "puzzle"
-    stem = "answer-key" if answer_key else "puzzle"
     path_text, _selected = QFileDialog.getSaveFileName(
         parent,
         f"Save {kind.title()} PDF",
-        f"{stem}.pdf",
+        default_export_name(answer_key=answer_key, suffix="pdf"),
         "PDF files (*.pdf)",
     )
     if not path_text:

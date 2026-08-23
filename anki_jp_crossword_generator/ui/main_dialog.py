@@ -375,10 +375,16 @@ class MainDialog(QWidget):
         grid.setVerticalSpacing(8)
         self.include_due = QCheckBox("Due now")
         self.include_learn = QCheckBox("Learning")
-        self.include_review = QCheckBox("Review")
+        self.include_review = QCheckBox("All review cards")
         self.include_new = QCheckBox("New / unreviewed")
         self.include_suspended = QCheckBox("Suspended")
         self.include_solved = QCheckBox("Solved crosswords")
+        self.include_due.setToolTip("Cards Anki considers due now, including due reviews and learning cards.")
+        self.include_learn.setToolTip("Cards in learning or relearning steps.")
+        self.include_review.setToolTip("All review-queue cards, including cards due today and cards scheduled for later. This overlaps with Due now.")
+        self.include_new.setToolTip("New cards that have not been reviewed yet.")
+        self.include_suspended.setToolTip("Suspended cards, which are normally excluded from study.")
+        self.include_solved.setToolTip("Notes used in a crossword previously marked solved.")
         boxes = (
             self.include_due,
             self.include_learn,
@@ -460,6 +466,10 @@ class MainDialog(QWidget):
         self.show_skipped = QCheckBox("Show skipped notes")
         qconnect(self.show_skipped.toggled, self._on_show_skipped_toggled)
         layout.addWidget(self.show_skipped)
+        self.show_preview_answers = QCheckBox("Show answers in preview")
+        self.show_preview_answers.setToolTip("Show the answer column before generating a crossword.")
+        qconnect(self.show_preview_answers.toggled, self._on_show_preview_answers_toggled)
+        layout.addWidget(self.show_preview_answers)
 
         self.table = QTableWidget(0, len(VALID_COLUMNS))
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -532,6 +542,7 @@ class MainDialog(QWidget):
         self.mark_text.blockSignals(False)
         self._update_mark_color_enabled()
         self._set_checkbox(self.show_skipped, settings.show_excluded_preview)
+        self._set_checkbox(self.show_preview_answers, settings.show_preview_answers)
         self._apply_table_headers(show_skipped=settings.show_excluded_preview)
         if settings.deck_name:
             self._load_fields_for_deck()
@@ -704,10 +715,12 @@ class MainDialog(QWidget):
             if self.session.last_result is not None:
                 self._apply_result(self.session.last_result)
 
-        self._save_history_snapshot(puzzle)
-        self._show_puzzle(puzzle, self.session.settings.generation_output)
+        record_id = self._save_history_snapshot(puzzle)
+        self._show_puzzle(
+            puzzle, self.session.settings.generation_output, history_record_id=record_id
+        )
 
-    def _show_puzzle(self, puzzle, output: str) -> None:
+    def _show_puzzle(self, puzzle, output: str, *, history_record_id: str | None = None) -> None:
         """Open a current or saved puzzle in the requested presentation."""
         language = puzzle.language
         if output == "pdf_preview":
@@ -719,7 +732,11 @@ class MainDialog(QWidget):
                 except Exception:
                     pass
             dialog = PdfPreviewDialog(
-                self.session, puzzle, self._export_title(language), parent=self
+                self.session,
+                puzzle,
+                self._export_title(language),
+                parent=self,
+                on_mark_solved=lambda: self._mark_history_solved(history_record_id),
             )
             self._pdf_preview_dialog = dialog
             bring_crossword_window_to_front(dialog)
@@ -738,21 +755,35 @@ class MainDialog(QWidget):
             puzzle,
             parent=self,
             on_settings_changed=self._on_settings_changed,
+            on_mark_solved=lambda: self._mark_history_solved(history_record_id),
         )
         self._puzzle_dialog = dialog
         bring_crossword_window_to_front(dialog)
 
-    def _save_history_snapshot(self, puzzle) -> None:
+    def _save_history_snapshot(self, puzzle) -> str | None:
         """Save generated grids independently from future Anki card edits."""
         try:
             from aqt import mw
             from ..history import history_path, save_history_record
 
-            save_history_record(
+            record = save_history_record(
                 history_path(mw), puzzle, title=self._export_title(puzzle.language)
             )
+            return record.id
         except Exception:
             # History is an enhancement; a write failure must not lose a puzzle.
+            return None
+
+    def _mark_history_solved(self, record_id: str | None) -> None:
+        """Reflect an explicit solved action in the saved-puzzle history."""
+        if not record_id:
+            return
+        try:
+            from aqt import mw
+            from ..history import history_path, mark_history_record_solved
+
+            mark_history_record_solved(history_path(mw), record_id)
+        except Exception:
             pass
 
     def _open_history(self) -> None:
@@ -774,7 +805,7 @@ class MainDialog(QWidget):
         bring_crossword_window_to_front(dialog)
 
     def _open_history_record(self, record, output: str) -> None:
-        self._show_puzzle(record.puzzle, output)
+        self._show_puzzle(record.puzzle, output, history_record_id=record.id)
 
     def _on_output_changed(self, _index: int) -> None:
         self.session.settings.generation_output = str(
@@ -950,6 +981,11 @@ class MainDialog(QWidget):
             self._fill_table(self.session.last_result)
             self.counts.setText(self._counts_text(self.session.last_result))
 
+    def _on_show_preview_answers_toggled(self, checked: bool) -> None:
+        self.session.settings.show_preview_answers = bool(checked)
+        if self.session.last_result is not None:
+            self._fill_table(self.session.last_result)
+
     def _rerun_preview(self) -> None:
         if self._busy:
             return
@@ -1036,6 +1072,7 @@ class MainDialog(QWidget):
     def _fill_table(self, result: Any) -> None:
         show_skipped = self.show_skipped.isChecked()
         self._apply_table_headers(show_skipped=show_skipped)
+        show_answers = self.show_preview_answers.isChecked()
         if show_skipped:
             rows = getattr(result, "preview", None) or (
                 tuple(result.selected) + tuple(getattr(result, "excluded", ()) or ())
@@ -1060,36 +1097,29 @@ class MainDialog(QWidget):
             if show_skipped:
                 included = "✓" if getattr(entry, "included", True) else "✗"
                 status = QTableWidgetItem(getattr(entry, "status", "Valid"))
-                items = (
-                    QTableWidgetItem(included),
-                    QTableWidgetItem(answer),
-                    QTableWidgetItem(language),
-                    QTableWidgetItem(cells),
-                    status,
-                )
+                items = [QTableWidgetItem(included)]
+                if show_answers:
+                    items.append(QTableWidgetItem(answer))
+                items.extend((QTableWidgetItem(language), QTableWidgetItem(cells), status))
                 for item in items:
                     item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self.table.setItem(row, 0, items[0])
-                self.table.setItem(row, 1, items[1])
-                self.table.setItem(row, 2, items[2])
-                self.table.setItem(row, 3, items[3])
-                self.table.setCellWidget(row, 4, clue)
-                self.table.setItem(row, 5, status)
+                for column, item in enumerate(items[:-1]):
+                    self.table.setItem(row, column, item)
+                clue_column = len(items) - 1
+                self.table.setCellWidget(row, clue_column, clue)
+                self.table.setItem(row, clue_column + 1, status)
                 reason = getattr(entry, "status_reason", "") or ""
                 if reason:
                     status.setToolTip(reason)
             else:
-                items = (
-                    QTableWidgetItem(answer),
-                    QTableWidgetItem(language),
-                    QTableWidgetItem(cells),
-                )
+                items = [QTableWidgetItem(language), QTableWidgetItem(cells)]
+                if show_answers:
+                    items.insert(0, QTableWidgetItem(answer))
                 for item in items:
                     item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self.table.setItem(row, 0, items[0])
-                self.table.setItem(row, 1, items[1])
-                self.table.setItem(row, 2, items[2])
-                self.table.setCellWidget(row, 3, clue)
+                for column, item in enumerate(items):
+                    self.table.setItem(row, column, item)
+                self.table.setCellWidget(row, len(items), clue)
         self.table.resizeRowsToContents()
         self._update_browse_button()
 
@@ -1126,11 +1156,15 @@ class MainDialog(QWidget):
             tooltip("Could not open that note in Browse.")
 
     def _apply_table_headers(self, *, show_skipped: bool) -> None:
+        show_answers = getattr(self, "show_preview_answers", None)
+        answers_visible = bool(show_answers and show_answers.isChecked())
         labels = SKIPPED_COLUMNS if show_skipped else VALID_COLUMNS
+        if not answers_visible:
+            labels = tuple(label for label in labels if label != "Answer")
         self.table.setColumnCount(len(labels))
         self.table.setHorizontalHeaderLabels(list(labels))
         header = self.table.horizontalHeader()
-        stretch = 4 if show_skipped else 3
+        stretch = labels.index("Clue")
         for index in range(len(labels)):
             mode = (
                 QHeaderView.ResizeMode.Stretch

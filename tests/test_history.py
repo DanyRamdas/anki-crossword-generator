@@ -2,6 +2,7 @@ from anki_jp_crossword_generator.crossword.puzzle import PlacedEntry, Puzzle
 from anki_jp_crossword_generator.history import (
     delete_history_record,
     load_history,
+    mark_history_record_solved,
     save_history_record,
 )
 
@@ -53,3 +54,13 @@ def test_history_can_remove_a_snapshot(tmp_path) -> None:
     delete_history_record(path, saved.id)
 
     assert load_history(path) == []
+
+
+def test_history_records_when_a_puzzle_is_marked_solved(tmp_path) -> None:
+    path = tmp_path / "puzzle-history.json"
+    saved = save_history_record(path, _puzzle(), title="Anki Crossword")
+
+    mark_history_record_solved(path, saved.id)
+
+    records = load_history(path)
+    assert records[0].solved_at is not None

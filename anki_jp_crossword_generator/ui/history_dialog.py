@@ -73,7 +73,7 @@ class HistoryDialog(QWidget):
         for record in self._records:
             puzzle = record.puzzle
             label = (
-                f"{_display_time(record.created_at)} - {puzzle.placed_count} clues - "
+                f"{'✓ Solved - ' if record.solved_at else ''}{_display_time(record.created_at)} - {puzzle.placed_count} clues - "
                 f"{puzzle.language.title()} - seed {puzzle.seed}"
             )
             item = QListWidgetItem(label)
