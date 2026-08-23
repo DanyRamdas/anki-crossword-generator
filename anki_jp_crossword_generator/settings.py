@@ -128,6 +128,7 @@ DEFAULTS: dict[str, Any] = {
     "puzzle_scale": 80,
     "generation_output": "interactive",
     "show_excluded_preview": False,
+    "show_preview_answers": False,
     "clue_mark_style": "highlight",
     "clue_mark_color": "black",
     "clue_mark_text": "red",
@@ -230,6 +231,7 @@ class AddonSettings:
     puzzle_scale: int = 80
     generation_output: str = "interactive"
     show_excluded_preview: bool = False
+    show_preview_answers: bool = False
     clue_mark_style: str = "highlight"
     clue_mark_color: str = "black"
     clue_mark_text: str = "red"
@@ -417,6 +419,7 @@ class AddonSettings:
             puzzle_scale=puzzle_scale,
             generation_output=generation_output,
             show_excluded_preview=_as_bool(raw.get("show_excluded_preview"), False),
+            show_preview_answers=_as_bool(raw.get("show_preview_answers"), False),
             clue_mark_style=mark_style,
             clue_mark_color=mark_color,
             clue_mark_text=mark_text,

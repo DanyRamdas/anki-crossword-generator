@@ -26,12 +26,20 @@ from .windowing import anki_window_parent, crossword_window_flags, prepare_cross
 class PdfPreviewDialog(QWidget):
     """Preview an empty puzzle or answer key before choosing a file path."""
 
-    def __init__(self, session: CrosswordSession, puzzle: Puzzle, title: str, parent=None) -> None:
+    def __init__(
+        self,
+        session: CrosswordSession,
+        puzzle: Puzzle,
+        title: str,
+        parent=None,
+        on_mark_solved=None,
+    ) -> None:
         super().__init__(anki_window_parent(parent), crossword_window_flags())
         self.session = session
         self.puzzle = puzzle
         self.title = title
         self._answer_key = False
+        self._on_puzzle_marked_solved = on_mark_solved
         self.setWindowTitle(f"PDF preview - {title}")
         prepare_crossword_window(self)
         self.resize(1120, 850)
@@ -136,6 +144,9 @@ class PdfPreviewDialog(QWidget):
 
     def _mark_solved(self) -> None:
         updated, _tag = self.session.mark_puzzle_solved(self.puzzle)
+        callback = self._on_puzzle_marked_solved
+        if callback is not None:
+            callback()
         self.mark_solved_button.setEnabled(False)
         self.mark_solved_button.setText(
             "Marked solved" if updated else "Already marked solved"

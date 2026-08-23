@@ -52,6 +52,7 @@ class PuzzleDialog(QWidget):
         puzzle: Puzzle,
         parent: QWidget | None = None,
         on_settings_changed=None,
+        on_mark_solved=None,
     ) -> None:
         super().__init__(anki_window_parent(parent), crossword_window_flags())
         self.session = session
@@ -60,6 +61,7 @@ class PuzzleDialog(QWidget):
         self.play = PlayState(puzzle)
         self._busy = False
         self._on_settings_changed = on_settings_changed
+        self._on_puzzle_marked_solved = on_mark_solved
         self._scale = _normalise_scale(getattr(session.settings, "puzzle_scale", 80))
         title = "Native → Japanese" if language == "japanese" else "Japanese → Native"
         self.setWindowTitle(f"{ADDON_NAME} — {title}")
@@ -331,6 +333,9 @@ class PuzzleDialog(QWidget):
 
     def _on_mark_solved(self) -> None:
         updated, _tag = self.session.mark_puzzle_solved(self.puzzle)
+        callback = self._on_puzzle_marked_solved
+        if callback is not None:
+            callback()
         self.mark_solved_btn.setEnabled(False)
         if updated:
             tooltip(f"Marked {updated} notes as solved.")

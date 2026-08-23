@@ -16,6 +16,7 @@ from ..export import (
     export_puzzle_png,
     export_puzzle_svg,
 )
+from .pdf_export import default_export_name
 
 
 def save_image(
@@ -26,12 +27,11 @@ def save_image(
     if format_key not in {"png", "svg"}:
         raise ValueError(f"Unsupported image format: {format_name}")
     kind = "answer key" if answer_key else "puzzle"
-    stem = "answer-key" if answer_key else "puzzle"
     upper = format_key.upper()
     path_text, _selected = QFileDialog.getSaveFileName(
         parent,
         f"Save {kind.title()} {upper}",
-        f"{stem}.{format_key}",
+        default_export_name(answer_key=answer_key, suffix=format_key),
         f"{upper} files (*.{format_key})",
     )
     if not path_text:

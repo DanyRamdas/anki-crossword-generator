@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.3
+
+- Default export filenames now include today's date.
+- Marking a puzzle solved now labels its history entry as solved.
+- Clarified card-state choices and hid preview answers by default.
+- Updated the configuration screenshot.
+
 ## 0.6.2
 
 - Made the JMdict backfill use the currently selected Native answer field instead of assuming `englishWord`.

@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -21,6 +21,7 @@ class HistoryRecord:
     created_at: str
     title: str
     puzzle: Puzzle
+    solved_at: str | None = None
 
 
 def history_path(mw: Any) -> Path:
@@ -71,11 +72,28 @@ def delete_history_record(path: Path, record_id: str) -> None:
     )
 
 
+def mark_history_record_solved(path: Path, record_id: str) -> None:
+    """Persist that a saved puzzle was marked solved in Anki."""
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    records = [
+        replace(record, solved_at=record.solved_at or timestamp)
+        if record.id == record_id
+        else record
+        for record in load_history(path)
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps([_record_to_dict(item) for item in records], ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
 def _record_to_dict(record: HistoryRecord) -> dict[str, Any]:
     return {
         "id": record.id,
         "created_at": record.created_at,
         "title": record.title,
+        "solved_at": record.solved_at,
         "puzzle": _puzzle_to_dict(record.puzzle),
     }
 
@@ -86,6 +104,7 @@ def _record_from_dict(value: dict[str, Any]) -> HistoryRecord:
         created_at=str(value["created_at"]),
         title=str(value.get("title") or "Anki Crossword"),
         puzzle=_puzzle_from_dict(value["puzzle"]),
+        solved_at=str(value["solved_at"]) if value.get("solved_at") else None,
     )
 
 
