@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.4
+
+- Improved printable puzzle sizing, clue typography, spacing, grid boundaries, and clue-number legibility.
+
 ## 0.6.3
 
 - Default export filenames now include today's date.

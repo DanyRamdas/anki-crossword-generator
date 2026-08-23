@@ -194,21 +194,27 @@ def _page_plan(puzzle: Puzzle, *, resolution: int) -> _PagePlan:
     width, height = portrait[1], portrait[0]
     margin = round(0.48 * resolution)
     header = round(0.75 * resolution)
-    grid_column_right = round(width * 0.47)
+    # Give the puzzle a little over half of the page. The old 47% cap made a
+    # 20-word grid look almost identical at every scale because the grid was
+    # constrained long before the available page height mattered.
+    grid_column_right = round(width * 0.52)
     available_w = grid_column_right - margin
     footer = round(0.25 * resolution)
     available_h = height - 2 * margin - header - footer
     natural_cell = min(available_w // puzzle.cols, available_h // puzzle.rows)
-    # Leave breathing room around the grid instead of filling the entire left
-    # column. This reads more like a newspaper puzzle than a software export.
-    cell = max(18, round(natural_cell * 0.74))
+    # Keep a small visual margin, but use more of the left column so the grid
+    # remains comfortably writable when printed rather than looking like a
+    # miniature software preview.
+    cell = max(18, round(natural_cell * 0.98))
     grid_w = cell * puzzle.cols
     grid_h = cell * puzzle.rows
     # Centre only inside the left grid column; centring across the full page
     # would overlap the right-hand clue columns.
     grid_x = margin + max(0, (available_w - grid_w) // 2)
     grid_y = margin + header
-    clue_x = round(width * 0.50)
+    # A restrained gutter separates the black grid from the clue column
+    # without leaving the page looking split into two unrelated panels.
+    clue_x = round(width * 0.54)
     clue_top = grid_y + max(42, round(cell * 0.55))
     clue_bottom = height - margin - footer
     return _PagePlan(
@@ -231,7 +237,7 @@ def _draw_one_page(painter, plan: _PagePlan, puzzle: Puzzle, title: str, answers
 
     painter.fillRect(0, 0, plan.width, plan.height, QColor("#ffffff"))
     title_px = max(56, round(plan.cell * 0.8))
-    date_px = max(38, round(title_px * 0.68))
+    date_px = max(42, round(title_px * 0.74))
     painter.setPen(QColor("#151515"))
     title_font = _print_font()
     title_font.setPixelSize(title_px)
@@ -245,7 +251,7 @@ def _draw_one_page(painter, plan: _PagePlan, puzzle: Puzzle, title: str, answers
     date_font.setBold(False)
     date_font.setItalic(True)
     painter.setFont(date_font)
-    painter.setPen(QColor("#3f3f3f"))
+    painter.setPen(QColor("#555555"))
     painter.drawText(plan.margin + title_width + date_px // 2, baseline, f"- {_long_date()}")
     painter.setPen(QPen(QColor("#151515"), max(1, plan.cell // 26)))
     rule_y = baseline + max(18, round(date_px * 0.55))
@@ -262,13 +268,16 @@ def _draw_one_page(painter, plan: _PagePlan, puzzle: Puzzle, title: str, answers
                 continue
             painter.fillRect(x, y, plan.cell, plan.cell, QColor("#ffffff"))
             painter.setPen(QPen(QColor("#151515"), max(1, plan.cell // 30)))
-            painter.drawRect(x, y, plan.cell, plan.cell)
+            # QPainter centres the pen on the rectangle edge. Drawing one
+            # pixel inside prevents perimeter cells from spilling outside the
+            # solid crossword block.
+            painter.drawRect(x, y, plan.cell - 1, plan.cell - 1)
             number = number_map.get((row, col))
             if number is not None:
-                _set_font(painter, _print_font(), max(10, round(plan.cell * 0.2)), bold=False)
+                _set_font(painter, _print_font(), max(12, round(plan.cell * 0.29)), bold=True)
                 painter.drawText(
-                    x + max(3, plan.cell // 12),
-                    y + round(plan.cell * 0.25),
+                    x + max(4, plan.cell // 10),
+                    y + round(plan.cell * 0.32),
                     str(number),
                 )
             if answers:
@@ -284,7 +293,10 @@ def _draw_one_page(painter, plan: _PagePlan, puzzle: Puzzle, title: str, answers
 
     painter.setPen(QColor("#151515"))
     column_width = plan.width - plan.clue_x - plan.margin
-    section_gap = max(32, plan.cell // 2)
+    # Keep the final Across clue from visually running into the Down heading.
+    # This is deliberately independent of the grid's fine line weight: it is
+    # a section break, not simply another clue margin.
+    section_gap = max(72, round(plan.cell * 1.4))
     across_entries = puzzle.across()
     down_entries = puzzle.down()
     available_height = plan.clue_bottom - plan.clue_top - section_gap
@@ -298,7 +310,7 @@ def _draw_one_page(painter, plan: _PagePlan, puzzle: Puzzle, title: str, answers
         total_entries = len(across_entries) + len(down_entries)
         across_height = max(
             round(available_height * len(across_entries) / total_entries),
-            round(available_height * 0.28),
+            round(available_height * 0.42),
         )
         across_bottom = min(plan.clue_bottom - section_gap, plan.clue_top + across_height)
         down_top = across_bottom + section_gap
@@ -357,9 +369,10 @@ def _draw_clue_column(
     from aqt.qt import QColor, QRectF
 
     painter.setPen(QColor("#151515"))
-    _set_font(painter, _print_font(), max(30, round(cell * 0.52)), bold=True)
+    heading_px = _clue_heading_size(body_px, cell)
+    _set_font(painter, _print_font(), heading_px, bold=True)
     painter.drawText(x, top, heading)
-    y = top + max(22, round(cell * 0.48))
+    y = top + max(heading_px + 8, round(cell * 0.72))
     for entry in entries:
         document = _clue_document(entry, width, body_px, answers)
         required = max(17, round(document.size().height())) + max(7, body_px // 3)
@@ -401,8 +414,13 @@ def _clue_body_size(top: int, bottom: int, count: int, cell: int) -> int:
     # A typical puzzle has about ten clues in each section. Full-width clue
     # sections need less wrap allowance than narrow newspaper columns, so this
     # keeps the default 20-clue worksheet comfortably readable.
-    line_budget = round(max(1, count) * 1.55 + 3)
-    return max(32, min(round(cell * 0.6), height // line_budget))
+    line_budget = round(max(1, count) * 1.42 + 3)
+    return max(38, min(round(cell * 0.88), height // line_budget))
+
+
+def _clue_heading_size(body_px: int, cell: int) -> int:
+    """Keep section labels visibly larger than their clue text."""
+    return max(body_px + 8, round(cell * 0.64))
 
 
 def _fit_clue_body_size(
@@ -416,14 +434,14 @@ def _fit_clue_body_size(
     """Find the largest type size that fits the actual wrapped clues."""
     items = tuple(entries)
     preferred = _clue_body_size(top, bottom, len(items), cell)
-    for size in range(preferred, 17, -1):
-        y = top + max(22, round(cell * 0.48))
+    for size in range(preferred, 19, -1):
+        y = top + max(_clue_heading_size(size, cell) + 8, round(cell * 0.72))
         for entry in items:
             document = _clue_document(entry, width, size, answers)
             y += max(17, round(document.size().height())) + max(7, size // 3)
         if y <= bottom:
             return size
-    return 18
+    return 20
 
 
 def _wrap_text(text: str, width: int, pixel_size: int) -> list[str]:
